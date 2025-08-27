@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>HLS Protected Video Player</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        video { width: 100%; max-width: 800px; }
+        .form { margin: 20px 0; padding: 20px; background: #f5f5f5; }
+        button { padding: 10px 20px; margin: 5px; }
+        .status { padding: 10px; margin: 10px 0; }
+        .success { background: #d4edda; }
+        .error { background: #f8d7da; }
+    </style>
+</head>
+<body>
+    <h1>HLS Protected Video Player</h1>
+    
+    <div class="form">
+        <input type="text" id="username" placeholder="Username" value="demo">
+        <input type="password" id="password" placeholder="Password" value="demo123">
+        <button onclick="login()">Login</button>
+    </div>
+    
+    <video id="video" controls></video>
+    <div>
+        <button onclick="loadProtectedHLS()">Play Protected HLS</button>
+    </div>
+    
+    <div id="status">Ready</div>
+
+    <script>
+        let token = null;
+        let hls = null;
+        
+        function showStatus(msg, type = 'success') {
+            document.getElementById('status').textContent = msg;
+            document.getElementById('status').className = `status ${type}`;
+        }
+        
+        async function login() {
+            showStatus('Attempting login...');
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                const response = await fetch('http://localhost:8001/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    token = data.token;
+                    showStatus('Login successful');
+                } else {
+                    showStatus('Login failed', 'error');
+                }
+            } catch (error) {
+                showStatus('Login error: ' + error.message, 'error');
+            }
+        }
+        
+        function loadProtectedHLS() {
+            if (!token) {
+                showStatus('Please login first', 'error');
+                return;
+            }
+            
+            const video = document.getElementById('video');
+            
+            if (Hls.isSupported()) {
+                if (hls) hls.destroy();
+                
+                hls = new Hls({
+                    xhrSetup: function(xhr, url) {
+                        if (url.includes('localhost:8001')) {
+                            xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+                        }
+                    }
+                });
+                
+                hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                    showStatus('Encrypted HLS loaded successfully! Video is playing.');
+                });
+                
+                hls.on(Hls.Events.ERROR, function(event, data) {
+                    console.error('HLS Error:', data);
+                    showStatus('HLS Error: ' + data.details, 'error');
+                });
+                
+                hls.loadSource('http://localhost:8001/playlist');
+                hls.attachMedia(video);
+                
+                showStatus('Loading encrypted HLS stream...');
+                
+            } else {
+                showStatus('HLS not supported in this browser', 'error');
+            }
+        }
+    </script>
+</body>
+</html>
